@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ad-Free Live Cricket</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .loader { border-top-color: #3b82f6; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    
+    <!-- Navbar -->
+    <nav class="bg-slate-800 border-b border-slate-700 sticky top-0 z-10 shadow-lg">
+        <div class="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <span class="text-3xl">🏏</span> 
+                <span class="tracking-wide">Ad-Free<span class="text-blue-400">Cricket</span></span>
+            </h1>
+            <button onclick="fetchMatches()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-md">
+                ↻ Refresh
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl mx-auto px-4 py-8">
+        
+        <!-- API Key Setup Warning (Hides automatically if key is provided) -->
+        <div id="api-warning" class="hidden bg-yellow-900/50 border border-yellow-600 text-yellow-200 p-4 rounded-xl mb-6 shadow-md">
+            <strong>Action Required:</strong> You need to add your free API Key to the code to see live matches. (See instructions below the code!)
+        </div>
+
+        <div id="loading" class="flex flex-col items-center justify-center py-20">
+            <div class="loader ease-linear rounded-full border-4 border-slate-700 h-12 w-12 mb-4"></div>
+            <p class="text-slate-400 font-medium animate-pulse">Fetching latest scores...</p>
+        </div>
+
+        <!-- Matches Grid -->
+        <div id="matches-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 hidden">
+            <!-- Matches will be injected here by JavaScript -->
+        </div>
+
+        <div id="error-message" class="hidden bg-red-900/50 border border-red-600 text-red-200 p-4 rounded-xl text-center shadow-md">
+            Failed to load matches. Please check your API key or internet connection.
+        </div>
+    </main>
+
+    <script>
+        // ==========================================
+        // STEP 1: PASTE YOUR API KEY HERE
+        // ==========================================
+        const API_KEY = "2c1337c3-1e7a-49d5-83fc-5dcf3b4f619e"; // Replace this with your CricketData.org API Key
+        
+        const container = document.getElementById('matches-container');
+        const loading = document.getElementById('loading');
+        const errorDiv = document.getElementById('error-message');
+        const warningDiv = document.getElementById('api-warning');
+
+        async function fetchMatches() {
+            // Show warning if API key isn't set
+            if(API_KEY === "YOUR_API_KEY_HERE" || API_KEY === "") {
+                loading.classList.add('hidden');
+                warningDiv.classList.remove('hidden');
+                return;
+            }
+
+            // UI Reset
+            loading.classList.remove('hidden');
+            container.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+            container.innerHTML = '';
+
+            try {
+                // Fetch from CricketData (Free tier)
+                const response = await fetch(`https://api.cricapi.com/v1/currentMatches?apikey=${API_KEY}&offset=0`);
+                const result = await response.json();
+
+                if (result.status !== "success") {
+                    throw new Error("API Error");
+                }
+
+                const matches = result.data;
+                loading.classList.add('hidden');
+                container.classList.remove('hidden');
+
+                if(matches.length === 0) {
+                    container.innerHTML = `<p class="text-slate-400 col-span-2 text-center py-10">No live matches at the moment.</p>`;
+                    return;
+                }
+
+                // Render each match
+                matches.forEach(match => {
+                    const matchCard = document.createElement('div');
+                    matchCard.className = "bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-shadow flex flex-col justify-between";
+                    
+                    // Format Scores
+                    let scoreHtml = '';
+                    if (match.score && match.score.length > 0) {
+                        match.score.forEach(s => {
+                            scoreHtml += `
+                                <div class="flex justify-between items-center mt-2 bg-slate-900/50 p-2 rounded-lg">
+                                    <span class="text-sm font-medium text-slate-300">${s.inning.replace(' Inning', '')}</span>
+                                    <span class="font-bold text-lg text-white">${s.r}/${s.w} <span class="text-xs text-slate-400 font-normal">(${s.o} ov)</span></span>
+                                </div>
+                            `;
+                        });
+                    } else {
+                        scoreHtml = `<p class="text-slate-400 text-sm mt-3 italic">Match hasn't started or no score available yet.</p>`;
+                    }
+
+                    // Status styling
+                    let statusColor = "text-slate-400";
+                    if(match.matchStarted && !match.matchEnded) statusColor = "text-green-400 font-medium animate-pulse";
+                    if(match.matchEnded) statusColor = "text-blue-400 font-medium";
+
+                    matchCard.innerHTML = `
+                        <div>
+                            <div class="flex justify-between items-start mb-3">
+                                <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 bg-slate-900 px-2 py-1 rounded">${match.matchType || 'Match'}</span>
+                                <span class="text-xs text-slate-400 text-right">${match.date}</span>
+                            </div>
+                            <h2 class="text-lg font-bold text-white leading-tight mb-1">${match.name}</h2>
+                            <p class="text-xs text-slate-400 mb-4 flex items-center gap-1">📍 ${match.venue || 'Venue TBA'}</p>
+                            
+                            <div class="mb-4">
+                                ${scoreHtml}
+                            </div>
+                        </div>
+                        
+                        <div class="pt-3 border-t border-slate-700 mt-auto">
+                            <p class="text-sm ${statusColor}">${match.status}</p>
+                        </div>
+                    `;
+                    container.appendChild(matchCard);
+                });
+
+            } catch (error) {
+                console.error(error);
+                loading.classList.add('hidden');
+                errorDiv.classList.remove('hidden');
+            }
+        }
+
+        // Fetch matches on initial load
+        fetchMatches();
+    </script>
+</body>
+</html>
