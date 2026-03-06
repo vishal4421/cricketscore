@@ -20,7 +20,7 @@
                 <span class="text-3xl">🏏</span> 
                 <span class="tracking-wide">Ad-Free<span class="text-blue-400">Cricket</span></span>
             </h1>
-            <button onclick="fetchMatches()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-md">
+            <button onclick="forceRefresh()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-md">
                 ↻ Refresh
             </button>
         </div>
@@ -37,6 +37,10 @@
         <div id="loading" class="flex flex-col items-center justify-center py-20">
             <div class="loader ease-linear rounded-full border-4 border-slate-700 h-12 w-12 mb-4"></div>
             <p class="text-slate-400 font-medium animate-pulse">Fetching latest scores...</p>
+        </div>
+
+        <div id="cache-notice" class="hidden text-center bg-slate-800/50 p-2 rounded-lg text-xs text-slate-400 mb-4 shadow-inner">
+            Showing cached data to save API limits. <button onclick="forceRefresh()" class="text-blue-400 hover:text-blue-300 underline ml-2">Force Refresh</button>
         </div>
 
         <!-- Matches Grid -->
@@ -59,8 +63,12 @@
         const loading = document.getElementById('loading');
         const errorDiv = document.getElementById('error-message');
         const warningDiv = document.getElementById('api-warning');
+        const cacheNotice = document.getElementById('cache-notice');
 
-        async function fetchMatches() {
+        // Feature: Caching saves data for 5 minutes so page reloads don't waste API limits
+        const CACHE_TIME_MINUTES = 5;
+
+        async function fetchMatches(force = false) {
             // Show warning if API key isn't set
             if(API_KEY === "YOUR_API_KEY_HERE" || API_KEY === "") {
                 loading.classList.add('hidden');
@@ -72,7 +80,26 @@
             loading.classList.remove('hidden');
             container.classList.add('hidden');
             errorDiv.classList.add('hidden');
+            cacheNotice.classList.add('hidden');
             container.innerHTML = '';
+
+            // Check Local Storage Cache first
+            if (!force) {
+                const cachedData = localStorage.getItem('cricket_data');
+                const cacheTime = localStorage.getItem('cricket_data_time');
+                
+                if (cachedData && cacheTime) {
+                    const now = new Date().getTime();
+                    const diffMinutes = (now - cacheTime) / (1000 * 60);
+                    
+                    if (diffMinutes < CACHE_TIME_MINUTES) {
+                        loading.classList.add('hidden');
+                        cacheNotice.classList.remove('hidden');
+                        renderMatches(JSON.parse(cachedData));
+                        return;
+                    }
+                }
+            }
 
             try {
                 // Fetch from CricketData (Free tier)
@@ -84,20 +111,39 @@
                 }
 
                 const matches = result.data;
+                
+                // Save to cache
+                localStorage.setItem('cricket_data', JSON.stringify(matches));
+                localStorage.setItem('cricket_data_time', new Date().getTime().toString());
+
                 loading.classList.add('hidden');
-                container.classList.remove('hidden');
+                renderMatches(matches);
 
-                if(matches.length === 0) {
-                    container.innerHTML = `<p class="text-slate-400 col-span-2 text-center py-10">No live matches at the moment.</p>`;
-                    return;
-                }
+            } catch (error) {
+                console.error(error);
+                loading.classList.add('hidden');
+                errorDiv.classList.remove('hidden');
+            }
+        }
 
-                // Render each match
-                matches.forEach(match => {
-                    const matchCard = document.createElement('div');
-                    matchCard.className = "bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-shadow flex flex-col justify-between";
-                    
-                    // Format Scores
+        function forceRefresh() {
+            fetchMatches(true);
+        }
+
+        function renderMatches(matches) {
+            container.classList.remove('hidden');
+
+            if(matches.length === 0) {
+                container.innerHTML = `<p class="text-slate-400 col-span-2 text-center py-10">No live matches at the moment.</p>`;
+                return;
+            }
+
+            // Render each match
+            matches.forEach(match => {
+                const matchCard = document.createElement('div');
+                matchCard.className = "bg-slate-800 border border-slate-700 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-shadow flex flex-col justify-between";
+                
+                // Format Scores
                     let scoreHtml = '';
                     if (match.score && match.score.length > 0) {
                         match.score.forEach(s => {
@@ -135,14 +181,8 @@
                             <p class="text-sm ${statusColor}">${match.status}</p>
                         </div>
                     `;
-                    container.appendChild(matchCard);
-                });
-
-            } catch (error) {
-                console.error(error);
-                loading.classList.add('hidden');
-                errorDiv.classList.remove('hidden');
-            }
+                container.appendChild(matchCard);
+            });
         }
 
         // Fetch matches on initial load
